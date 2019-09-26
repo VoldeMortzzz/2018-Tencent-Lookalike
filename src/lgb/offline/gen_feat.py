@@ -60,7 +60,7 @@ def log(info):
 # In[ ]:
 
 
-def merge_count(df, columns_groupby, new_column_name, type='uint64'):
+def merge_count(df, columns_groupby, new_column_name, type='uint64'):#构造类别特征数量统计特征
     add = pd.DataFrame(df.groupby(columns_groupby).size()).reset_index()
     add.columns = columns_groupby + [new_column_name]
     df = df.merge(add, on=columns_groupby, how="left"); del add; gc.collect()
@@ -86,7 +86,7 @@ def preprocess_word(texts):
 # In[ ]:
 
 
-def down_sample(df, df_feat):
+def down_sample(df, df_feat):#对目标特征下采样，通过给定随机数种子保证每个特征组抽样的负样本是同样的
     df_majority = df_feat[df[target]==0]
     df_minority = df_feat[df[target]==1]
     df_majority_downsampled = resample(df_majority,
@@ -136,7 +136,7 @@ df = df.fillna('-1')
 
 
 onehot_feature = ['LBS', 'age', 'carrier', 'consumptionAbility', 'education', 'gender', 'house', 'os', 'ct', 'advertiserId', 'campaignId', 'creativeId', 'adCategoryId', 'productId', 'productType']
-for feature in onehot_feature:
+for feature in onehot_feature:#对单类别变量编码（age等数值变量也当做类别变量，取整作为类别）
     log(feature)
     try:
         df[feature] = LabelEncoder().fit_transform(df[feature].apply(int))
@@ -157,7 +157,7 @@ for feature in vector_feature:
 
 
 # Save aid+uid+label+creativeSize columns
-df_downsampled = down_sample(df, df[['aid', 'uid', 'label', 'creativeSize']])
+df_downsampled = down_sample(df, df[['aid', 'uid', 'label', 'creativeSize']])#aid没法onehot，类别数太多，实际上有些多类别变量都不适合onehot
 cPickle.dump(df_downsampled, open(ROOT_PATH + 'data/output/lgb/final/feat/train+test1+test2/all(basic).p', 'wb')); del df_downsampled; gc.collect()
 
 
@@ -182,7 +182,7 @@ log('columns: ' + str(df.columns))
 predictors_stat1 = []
 
 gb_list = ['uid', 'aid', 'LBS', 'age', 'carrier', 'consumptionAbility', 'education', 'gender', 'house', 'os', 'ct', 'advertiserId', 'campaignId', 'creativeId', 'adCategoryId', 'productId', 'productType', 'marriageStatus']
-for i in gb_list:
+for i in gb_list:#提取数量特征
     log(i)
     df = merge_count(df, [i], 'count_gb_' + i, 'uint32')
     predictors_stat1.append('count_gb_' + i)
@@ -190,6 +190,8 @@ for i in gb_list:
 gb_list = ['LBS', 'age', 'carrier', 'consumptionAbility', 'education', 'gender', 'house', 'os', 'ct']
 for i in gb_list:
     log('aid_' + i)
+    #aid与用户单类别特征交叉求数量特征（aid自己不能onehot比要求数量特征，而aid与其他特征的组合也是更多类更不能oht，
+    #所以一般二阶特征数量特征可做可不做，但aid的必须做）
     df = merge_count(df, ['aid', i], 'count_gb_aid_' + i, 'uint32')
     predictors_stat1.append('count_gb_aid_' + i)
     
@@ -205,7 +207,7 @@ cPickle.dump(df_downsampled, open(ROOT_PATH + 'data/output/lgb/final/feat/train+
 # Stat features
 predictors_stat2 = []
 
-gb_user = ['uid', 'age', 'LBS']
+gb_user = ['uid', 'age', 'LBS']#同样的uid、age做交叉的数量特征，且不做交叉特征，因为维度太大交叉的结果也是要oht的，这不现实
 gb_list = ['advertiserId', 'campaignId', 'creativeId', 'adCategoryId', 'productId', 'productType']
 for u in gb_user:
     for i in gb_list:
@@ -226,7 +228,7 @@ cPickle.dump(df_downsampled, open(ROOT_PATH + 'data/output/lgb/final/feat/train+
 predictors_stat3 = []
 
 vector_feature = ['appIdAction', 'appIdInstall', 'interest1', 'interest2', 'interest3', 'interest4', 'interest5', 'kw1', 'kw2', 'kw3', 'marriageStatus', 'topic1', 'topic2', 'topic3']
-for feature in vector_feature:
+for feature in vector_feature:#多类别特征求一个长度特征
     log(feature)
     df['len_' + feature] = [0 if var == 'W-1' else len(var.split()) for var in df[feature].values]
     predictors_stat3.append('len_' + feature)
@@ -240,7 +242,8 @@ cPickle.dump(df_downsampled, open(ROOT_PATH + 'data/output/lgb/final/feat/train+
 # In[ ]:
 
 
-# Stat features
+# Stat features 
+#对前面做的数量特征求比例，不是单个特征的比例，是交叉特征分别在两个特征下的比例（而不是全数据集下的比例(全数据下的比例跟数量对树模型没什么区别)）
 df_stat1 = cPickle.load(open(ROOT_PATH + 'data/output/lgb/final/feat/train+test1+test2/all(stat1).p', 'rb'))
 df_stat2 = cPickle.load(open(ROOT_PATH + 'data/output/lgb/final/feat/train+test1+test2/all(stat2).p', 'rb'))
 df_stat = pd.concat([df_stat1, df_stat2], axis=1); del df_stat1, df_stat2; gc.collect()
@@ -272,7 +275,7 @@ cPickle.dump(df_stat[predictors_stat4], open(ROOT_PATH + 'data/output/lgb/final/
 # In[ ]:
 
 
-gb_list = ['age', 'carrier', 'consumptionAbility', 'education']
+gb_list = ['age', 'carrier', 'consumptionAbility', 'education']#onehot
 
 predictors_aduser = []
 df_aduser = df[[]]
@@ -376,11 +379,13 @@ cPickle.dump(df_downsampled, open(ROOT_PATH + 'data/output/lgb/final/feat/train+
 # In[ ]:
 
 
-# Split dataset for local
+# Split dataset for local 
 df_downsampled = down_sample(df, df)
 train, test, _, _ = train_test_split(df_downsampled, df_downsampled[target], train_size=0.8, random_state=7, stratify=df_downsampled[target]); del df_downsampled; gc.collect()
 
 # Construct count vector features
+#cv特征
+
 train_cv = train[[]]
 test_cv = test[[]]
 vector_feature = ['appIdAction', 'appIdInstall', 'interest1', 'interest2', 'interest3', 'interest4', 'interest5', 'kw1', 'kw2', 'kw3', 'marriageStatus', 'topic1', 'topic2', 'topic3']
@@ -406,7 +411,7 @@ del train_cv, test_cv, train, test; gc.collect()
 
 
 gb_list = ['carrier', 'consumptionAbility', 'house', 'os', 'LBS', 'ct', 'age', 'education', 'gender']
-
+#交叉特征，这应该是是特征选择之后的结果，只跟有效的特征做交叉
 predictors_aidinter = []
 for i in gb_list:
     cola = 'aid'
